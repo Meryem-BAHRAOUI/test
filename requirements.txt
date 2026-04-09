@@ -1,0 +1,128 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# YOLOX + PaddleOCR — Screen Analyzer
+# Python 3.11 recommended
+#
+# Installation:
+#   pip install -r requirements.txt
+#
+# Note: PyTorch below is the CPU build.
+# For GPU (CUDA 11.8), replace torch/torchvision lines with:
+#   pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu118
+#
+# Note: PaddlePaddle below is the CPU build.
+# For GPU, replace paddlepaddle with:
+#   paddlepaddle-gpu>=2.6.0
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Core ML / Vision ──────────────────────────────────────────────────────────
+numpy==1.26.4
+torch==2.11.0
+torchvision==0.26.0
+torchaudio==2.11.0
+opencv-python==4.13.0.92
+opencv-contrib-python==4.10.0.84
+Pillow==12.2.0
+
+# ── YOLOX ─────────────────────────────────────────────────────────────────────
+yolox==0.3.0
+pycocotools==2.0.11
+thop==0.1.1.post2209072238
+
+# ── PaddleOCR / PaddlePaddle ──────────────────────────────────────────────────
+paddlepaddle==2.6.2
+paddleocr==2.7.3
+pyclipper==1.4.0
+shapely==2.1.2
+python-bidi==0.6.7
+RapidFuzz==3.14.5
+imgaug==0.4.0
+lmdb==2.2.0
+
+# ── FastAPI / API server ──────────────────────────────────────────────────────
+fastapi==0.135.3
+uvicorn==0.44.0
+starlette==1.0.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+anyio==4.13.0
+httpx==0.28.1
+httpcore==1.0.9
+
+# ── ONNX ──────────────────────────────────────────────────────────────────────
+onnx==1.21.0
+onnxsim==0.4.36
+
+# ── Scientific / Data ─────────────────────────────────────────────────────────
+scipy==1.17.1
+scikit-image==0.26.0
+matplotlib==3.10.8
+pandas==3.0.2
+sympy==1.14.0
+networkx==3.6.1
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+requests==2.33.1
+tqdm==4.67.3
+PyYAML==6.0.3
+loguru==0.7.3
+colorama==0.4.6
+colorlog==6.10.1
+rich==14.3.3
+click==8.3.2
+filelock==3.25.2
+packaging==26.0
+psutil==7.2.2
+six==1.17.0
+tabulate==0.10.0
+prettytable==3.17.0
+decorator==5.2.1
+Cython==3.2.4
+ninja==1.13.0
+
+# ── Deep Learning extras ──────────────────────────────────────────────────────
+huggingface_hub==1.9.2
+safetensors==0.7.0
+tensorboard==2.20.0
+tensorboard-data-server==0.7.2
+
+# ── PDF / Document ────────────────────────────────────────────────────────────
+PyMuPDF==1.27.2.2
+pypdfium2==5.6.0
+python-docx==1.2.0
+openpyxl==3.1.5
+lxml==6.0.2
+
+# ── HTTP / Network ────────────────────────────────────────────────────────────
+certifi==2026.2.25
+charset-normalizer==3.4.7
+idna==3.11
+urllib3==2.6.3
+h11==0.16.0
+
+# ── Typing / Serialization ────────────────────────────────────────────────────
+annotated-types==0.7.0
+typing_extensions==4.15.0
+ujson==5.12.0
+protobuf==3.20.2
+
+# ── Miscellaneous ─────────────────────────────────────────────────────────────
+python-dateutil==2.9.0.post0
+pytz==2026.1.post1
+tzdata==2026.1
+fsspec==2026.3.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+Markdown==3.10.2
+Werkzeug==3.1.8
+blinker==1.9.0
+itsdangerous==2.2.0
+soupsieve==2.8.3
+cssselect==1.4.0
+easyocr==1.7.2
+ImageIO==2.37.3
+imagesize==2.0.0
+ml_dtypes==0.5.4
+mpmath==1.3.0
+opt-einsum==3.3.0
+rarfile==4.2
+ruamel.yaml==0.19.1
