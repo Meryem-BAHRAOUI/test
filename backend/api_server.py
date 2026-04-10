@@ -195,12 +195,53 @@ def _remove_label_detections(ui_elements: list, ocr_blocks: list) -> list:
         if _is_small_square(el["bbox"]):
             kept.append(el)
             continue
-        is_label = any(
-            _intersection_over_a(el["bbox"], bl["bbox"]) >= LABEL_COVER_RATIO
-            for bl in ocr_blocks
-        )
+
+        el_x1, el_y1, el_x2, el_y2 = el["bbox"]
+        el_w = max(1, el_x2 - el_x1)
+        el_h = max(1, el_y2 - el_y1)
+        el_area = el_w * el_h
+
+        # Protéger les éléments vraiment larges : ce sont des vrais champs / dropdowns.
+        # Un label WinForms bordé est typiquement < 180 px de large.
+        # Un vrai input ou dropdown fait au moins 3× sa hauteur ET ≥ 180 px.
+        if el_w >= max(180, 3.5 * el_h):
+            kept.append(el)
+            continue
+
+        is_label = False
+        total_inter = 0
+
+        for bl in ocr_blocks:
+            bl_x1, bl_y1, bl_x2, bl_y2 = bl["bbox"]
+            bl_area = max(1, (bl_x2 - bl_x1) * (bl_y2 - bl_y1))
+
+            ix1 = max(el_x1, bl_x1); iy1 = max(el_y1, bl_y1)
+            ix2 = min(el_x2, bl_x2); iy2 = min(el_y2, bl_y2)
+            inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+            if inter == 0:
+                continue
+
+            total_inter += inter
+
+            # Critère 1 (original) : un bloc OCR couvre ≥ 60 % de la surface de l'élément
+            if inter / el_area >= LABEL_COVER_RATIO:
+                is_label = True
+                break
+
+            # Critère 2 : un bloc OCR se terminant par ":" est contenu
+            # à ≥ 70 % dans l'élément → label de formulaire quasi-certain
+            if bl["text"].strip().endswith(":") and inter / bl_area >= 0.70:
+                is_label = True
+                break
+
+        if not is_label:
+            # Critère 3 (cumulatif) : la somme des intersections couvre ≥ 60 % de l'élément
+            if min(total_inter, el_area) / el_area >= LABEL_COVER_RATIO:
+                is_label = True
+
         if not is_label:
             kept.append(el)
+
     return [{"id": f"u{i+1}", "bbox": el["bbox"], "score": el["score"]}
             for i, el in enumerate(kept)]
 
@@ -225,6 +266,67 @@ def img_to_b64(img: np.ndarray) -> str:
     return base64.b64encode(buf.tobytes()).decode()
 
 
+def _read_img_as_b64(path: str) -> str | None:
+    """Reads a saved PNG from disk and returns it as base64."""
+    try:
+        img = cv2.imread(path)
+        if img is None:
+            return None
+        return img_to_b64(img)
+    except Exception:
+        return None
+
+
+def _crop_bbox(img: np.ndarray, bbox: list, pad: int = 2) -> np.ndarray | None:
+    """Crops a bbox from img with optional padding. Returns None if empty."""
+    h, w = img.shape[:2]
+    x1 = max(0, bbox[0] - pad); y1 = max(0, bbox[1] - pad)
+    x2 = min(w, bbox[2] + pad); y2 = min(h, bbox[3] + pad)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return img[y1:y2, x1:x2]
+
+
+def crop_elements(
+    img: np.ndarray,
+    ui_elements: list,
+    ocr_blocks: list,
+    crops_dir: Path,
+    pad: int = 2,
+) -> dict[str, str]:
+    """
+    Saves a cropped PNG per UI element and OCR block.
+    Returns crops_index: {element_id → absolute file path}.
+    """
+    crops_dir.mkdir(parents=True, exist_ok=True)
+    index: dict[str, str] = {}
+
+    for el in ui_elements:
+        crop = _crop_bbox(img, el["bbox"], pad)
+        if crop is None:
+            continue
+        score_str = f"{el['score']:.2f}" if el.get("score") is not None else "0.00"
+        fname = f"ui_{el['id']}_{score_str}.png"
+        fpath = crops_dir / fname
+        cv2.imwrite(str(fpath), crop)
+        index[el["id"]] = str(fpath)
+
+    for bl in ocr_blocks:
+        crop = _crop_bbox(img, bl["bbox"], pad)
+        if crop is None:
+            continue
+        conf_str = f"{bl['conf']:.2f}" if bl.get("conf") is not None else "0.00"
+        safe = "".join(
+            c for c in bl["text"][:15] if c.isalnum() or c in " _-"
+        ).strip().replace(" ", "_")
+        fname = f"ocr_{bl['id']}_{conf_str}_{safe}.png"
+        fpath = crops_dir / fname
+        cv2.imwrite(str(fpath), crop)
+        index[bl["id"]] = str(fpath)
+
+    return index
+
+
 def analyze_and_save(img: np.ndarray) -> dict:
     h, w    = img.shape[:2]
     ts      = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -233,11 +335,24 @@ def analyze_and_save(img: np.ndarray) -> dict:
     raw_ui      = detect_ui(img)
     ui_elements = _remove_label_detections(raw_ui, ocr_blocks)
     annotated   = annotate(img, ui_elements, ocr_blocks)
+
+    # Save original image to disk (needed by /resolve for synthetic-element crops)
+    orig_path = DATA_DIR / f"original_{ts_file}.png"
+    cv2.imwrite(str(orig_path), img)
+
+    # Crop and save every detected element
+    crops_dir  = DATA_DIR / f"crops_{ts_file}"
+    crops_index = crop_elements(img, ui_elements, ocr_blocks, crops_dir)
+    print(f"  Crops saved → {crops_dir}  ({len(crops_index)} items)")
+
     clean = {
-        "screen_size": [w, h],
-        "timestamp":   ts,
-        "ui_elements": ui_elements,
-        "ocr_blocks":  ocr_blocks,
+        "screen_size":       [w, h],
+        "timestamp":         ts,
+        "ui_elements":       ui_elements,
+        "ocr_blocks":        ocr_blocks,
+        "original_img_path": str(orig_path),
+        "crops_dir":         str(crops_dir),
+        "crops_index":       crops_index,
     }
     json_path = DATA_DIR / f"analysis_{ts_file}.json"
     json_path.write_text(json.dumps(clean, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -298,6 +413,45 @@ def analyze_capture():
         raise HTTPException(500, str(e))
 
 
+def _attach_crops(
+    resolved_actions: list[dict],
+    crops_index: dict[str, str],
+    original_img_path: str | None,
+) -> None:
+    """
+    Mutates each resolved action in-place to add:
+      - crop_b64  : crop of the resolved UI element (or resolved_bbox if synthetic)
+      - ocr_crop_b64 : crop of the matched OCR text block
+    """
+    orig_img: np.ndarray | None = None
+    if original_img_path:
+        orig_img = cv2.imread(original_img_path)
+
+    for action in resolved_actions:
+        # ── UI element crop ──────────────────────────────────────────────────
+        el_id = action.get("resolved_element_id")
+        if el_id and el_id in crops_index:
+            action["crop_b64"] = _read_img_as_b64(crops_index[el_id])
+        elif orig_img is not None:
+            # Synthetic element: crop resolved_bbox from original image
+            rbbox = action.get("resolved_bbox")
+            if rbbox:
+                crop = _crop_bbox(orig_img, rbbox)
+                action["crop_b64"] = img_to_b64(crop) if crop is not None else None
+            else:
+                action["crop_b64"] = None
+        else:
+            action["crop_b64"] = None
+
+        # ── OCR text block crop ──────────────────────────────────────────────
+        ocr_crop = None
+        mtbbox = action.get("matched_text_bbox")
+        if mtbbox and orig_img is not None:
+            crop = _crop_bbox(orig_img, mtbbox)
+            ocr_crop = img_to_b64(crop) if crop is not None else None
+        action["ocr_crop_b64"] = ocr_crop
+
+
 @app.post("/resolve")
 def resolve(body: ResolveRequest):
     """Screen JSON + natural-language instruction → resolved actions via Ollama."""
@@ -323,6 +477,14 @@ def resolve(body: ResolveRequest):
         except (KeyError, ValueError) as exc:
             raise HTTPException(422, f"Invalid action from LLM: {exc}")
     result = resolve_actions(screen, parsed)
+
+    # Attach crop images to each resolved action
+    _attach_crops(
+        resolved_actions=result["resolved_actions"],
+        crops_index=body.screen_data.get("crops_index", {}),
+        original_img_path=body.screen_data.get("original_img_path"),
+    )
+
     return {
         "resolved_actions":   result["resolved_actions"],
         "unresolved_actions": result["unresolved_actions"],
