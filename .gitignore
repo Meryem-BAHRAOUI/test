@@ -12,7 +12,16 @@ build/
 *.egg
 
 # Data générée (résultats d'analyse — fichiers temporaires)
-data/
+backend/data/
+backend_capture/data/analysis_*.json
+backend_resolve/data/sample_actions.json
+
+# Modèles / poids (fichiers lourds)
+backend/yolox_weights/*.pth
+*.pth
+
+# YOLOX (dépôt externe volumineux)
+YOLOX/
 
 # Frontend
 frontend/node_modules/
